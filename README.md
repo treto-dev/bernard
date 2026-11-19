@@ -13,9 +13,7 @@
      /|   |\
 ```
 
-*Bernard l'ermite* is the French hermit crab: when it outgrows its shell, it moves into a new one and stays the same crab.
-
-`bern` does that for Django swappable models. You set `AUTH_USER_MODEL`, `WAGTAIL_PAGE_MODEL`, or any `Meta.swappable` setting partway through a project, and Bernard moves the existing rows into the new model. It copies nothing.
+`bern` swaps a Django swappable model partway through a project. You set `AUTH_USER_MODEL`, `WAGTAIL_PAGE_MODEL`, or any `Meta.swappable` setting, and Bernard moves the existing rows into the new model. It copies nothing.
 
 Run it from your project, next to `manage.py`:
 
@@ -110,3 +108,7 @@ After the move, the old code would query tables that no longer exist.
 
 - **Wagtail images and documents** (`WAGTAILIMAGES_IMAGE_MODEL`, `WAGTAILDOCS_DOCUMENT_MODEL`) are not Django-swappable. `wagtailimages.Image` stays a live model with its own migrations, so its table can't be taken. They need their rows copied instead.
 - Index and constraint names inherited from the legacy tables keep their old names. Django finds them by introspection when it later alters them.
+
+## Who is Bernard?
+
+*Bernard l'ermite* is French for hermit crab: when it outgrows its shell, it moves into a new one but stays the same crab deep inside.
