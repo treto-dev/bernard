@@ -86,6 +86,14 @@ def _run(args):
     connection = connections[args.database]
     db_name = os.path.basename(str(connection.settings_dict["NAME"]))
     print(f"bern · {args.command} · {args.database} ({connection.vendor}, {db_name})\n")
+    path = str(connection.settings_dict["NAME"])
+    if connection.vendor == "sqlite" and ":memory:" not in path and not os.path.exists(path):
+        print(f"No database at {path}: nothing to move. (bern never creates one.)")
+        return 1
+    with connection.cursor() as cursor:
+        if not connection.introspection.table_names(cursor):
+            print("The database is empty: nothing was ever migrated in it, so nothing to move.")
+            return 0
     moves, problems = core.plan(args.database)
     for move in moves:
         print(describe(move))

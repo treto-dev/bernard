@@ -145,3 +145,12 @@ def test_drops_the_empty_tables_an_earlier_migrate_made(db):
     bernard(db, "apply", "--yes")
     django(db, "settings_after", "migrate")
     assert django(db, "settings_after", "shell", "-c", CHECK).stdout.split()[-1] == content_type
+
+
+def test_plan_never_creates_a_database(tmp_path):
+    missing = tmp_path / "missing.sqlite3"
+    if os.environ.get("BERNARD_TEST_PG"):
+        pytest.skip("SQLite only")
+    result = bernard(str(missing), check=False)
+    assert result.returncode == 1 and "No database at" in result.stdout
+    assert not missing.exists()
