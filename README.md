@@ -1,5 +1,18 @@
 # Bernard
 
+```text
+                 .-~~~~-.
+              .-'  .--.  '-.
+             /   .' __ '.   \
+            |   /  (  )  \   |
+            |   \   ''   /   |
+     o   o   \   '.____.'   /
+      \ /     '-.        .-'
+   ,-( ^ )-.  __/'~~~~~~'
+  (_/ \_/ \_)--'
+     /|   |\
+```
+
 *Bernard l'ermite* is the French hermit crab: when it outgrows its shell, it moves into a new one and stays the same crab.
 
 `bernard` does that for Django swappable models. You set `AUTH_USER_MODEL`, `WAGTAIL_PAGE_MODEL`, or any `Meta.swappable` setting partway through a project, and Bernard moves the existing rows into the new model. It copies nothing.
