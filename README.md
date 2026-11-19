@@ -43,11 +43,11 @@ $ python manage.py migrate
 
 Bernard finds the swaps by itself. It loads your settings with `--settings`, `$DJANGO_SETTINGS_MODULE`, or the module your `manage.py` sets, then lists every model whose `_meta.swapped` is set. For each swap:
 
-1. It finds the migration that creates the new model. A database that predates the swap has never recorded that migration, which is why `migrate` fails with `InconsistentMigrationHistory`.
+1. It finds the migration that creates the new model, followed by the ones in its app that only shape what it created. Wagtail's base page takes three: create, bootstrap, finalize. A database that predates the swap has never recorded them, which is why `migrate` fails with `InconsistentMigrationHistory`. Or `migrate` passes, creates empty tables, and leaves your rows behind.
 2. It renames the legacy tables to the new names: the model's own table, its many-to-many tables, and companion models of the same name. Foreign keys pointing at them follow automatically.
-3. It creates the tables that have no legacy counterpart. It adds the columns, indexes and constraints the migration declares and the legacy table lacks. It changes column types that differ, such as `AutoField` to `BigAutoField`.
+3. It creates the tables that have no legacy counterpart. It adds the columns, indexes and constraints those migrations declare and the legacy table lacks. It changes column types that differ, such as `AutoField` to `BigAutoField`.
 4. It relabels the content types. Everything keyed on a content type follows: permissions, the admin log, Wagtail pages, revisions, and the search and reference indexes.
-5. It records the migration as applied, so `migrate` carries on from there.
+5. It records those migrations as applied, so `migrate` carries on from there.
 
 This is safe because Django skips every migration operation on a swapped-out model, so nothing will touch its tables again.
 
@@ -59,13 +59,21 @@ This is safe because Django skips every migration operation on a swapped-out mod
 - **Fails fast, doesn't queue.** On PostgreSQL, an advisory lock keeps two runs from overlapping. A 10 s `lock_timeout` makes Bernard give up instead of queueing behind a long transaction and blocking your site.
 - **Refuses what it can't do right**:
   - errors from Django's system checks;
-  - a creating migration that also does something else, like `RunPython`;
+  - a creating migration that also does something else, like `RunPython`. Wagtail's `BootstrapTranslatableModel` is the exception: it only fills translation keys the legacy pages already have;
   - legacy columns the new model would drop;
   - tables that both hold rows;
   - content types or permissions already in use under the new label.
 - **Idempotent.** Once the move is done, `bern apply --yes` does nothing. You can keep it before `migrate` in your deploy job.
 
 If an earlier `migrate` already created the new tables empty, Bernard drops them before moving the legacy ones in. It only does that while they are still empty and nothing else points at them.
+
+## Demos
+
+[`demos/`](demos) holds three projects caught halfway through a swap: Django's user model, Wagtail 8's base page, and the sites-conformes content page. Each `prepare.sh` builds that state; `demos/run.sh <demo>` takes it all the way through.
+
+## Fun
+
+Each command opens with Bernard scuttling across the terminal, and a successful move ends with the crab changing shells. Both only play in an interactive terminal, never in CI or a pipe. `--no-fun` skips them.
 
 ## Deploying
 

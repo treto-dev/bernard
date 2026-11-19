@@ -4,3 +4,5 @@ __pycache__/
 .ruff_cache/
 *.sqlite3
 dist/
+media/
+staticfiles/

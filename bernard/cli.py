@@ -27,8 +27,10 @@ def main(argv=None):
                         "then the one manage.py sets)")
     parser.add_argument("--database", default="default", help="database alias (default: default)")
     parser.add_argument("--yes", action="store_true", help="apply without asking, for deploy jobs")
-    parser.add_argument("--no-fun", action="store_true", help="skip the animation")
+    parser.add_argument("--no-fun", action="store_true", help="skip the animations")
     args = parser.parse_args(argv)
+    if not args.no_fun:
+        animation.intro()
     _setup(args.settings)
     return _run(args)
 
@@ -136,7 +138,7 @@ def describe(move):
     lines += [f"    alter    {t}.{c}  {a} → {b}" for t, c, a, b in move.alters]
     lines += [f"    add      {kind} {t}.{name}" for t, kind, name in move.adds]
     lines += [f"    relabel  {oa}.{om} → {na}.{nm}" for oa, om, na, nm in move.relabels]
-    lines.append(f"    record   {'.'.join(move.migration)} as applied")
+    lines += [f"    record   {'.'.join(key)} as applied" for key in move.records]
     return "\n".join(lines) + "\n"
 
 

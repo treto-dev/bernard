@@ -26,6 +26,11 @@ ADVISORY_LOCK = 0xBE4A4D  # PostgreSQL: one Bernard per database at a time
 LOCK_TIMEOUT = "10s"
 
 
+# Operations that may be left out when recording a migration, because they only fill data
+# the legacy rows already hold.
+SKIPPABLE = {"BootstrapTranslatableModel"}  # Wagtail: translation keys of legacy pages
+
+
 class Refused(Exception):
     pass
 
@@ -79,12 +84,12 @@ def plan(using="default"):
         if move:
             moves.append(move)
     moves.sort(key=lambda m: len(loader.graph.forwards_plan(m.migration)))
-    pending = {m.migration for m in moves} | loader.applied_migrations.keys()
+    pending = {r for m in moves for r in m.records} | loader.applied_migrations.keys()
     for move in moves:
-        missing = loader.graph.node_map[move.migration].parents
-        missing = sorted(p.key for p in missing if p.key not in pending)
-        if missing:
-            problems.append(f"{move.new}: apply {missing} first, {move.migration} depends on them.")
+        for key in (r for r in move.records if r in loader.graph.node_map):
+            missing = sorted(p.key for p in loader.graph.node_map[key].parents if p.key not in pending)
+            if missing:
+                problems.append(f"{move.new}: apply {missing} first, {key} depends on them.")
     return moves, problems
 
 
@@ -96,6 +101,36 @@ def _creating_migration(loader, model):
         ):
             return key, migration
     raise Refused(f"no migration of {app} creates {name}: run `makemigrations {app}` first.")
+
+
+def _creating_chain(loader, model):
+    """The migration creating `model`, then those of its app that only shape what it created
+    (Wagtail's base page takes three). Bernard records them all."""
+    key, migration = _creating_migration(loader, model)
+    chain, names = [], set()
+    while True:
+        grown = names | {op.name_lower for op in migration.operations if isinstance(op, CreateModel)}
+        stray = _stray_operation(migration, grown)
+        if stray and not chain:
+            raise Refused(f"{key} also does `{stray.describe()}`, which Bernard would skip when "
+                          "recording it: move that operation to a later migration.")
+        if stray:
+            break
+        chain.append((key, migration))
+        names = grown
+        children = [c.key for c in loader.graph.node_map[key].children if c.key[0] == key[0]]
+        if len(children) != 1 or children[0] in loader.applied_migrations:
+            break
+        key, migration = children[0], loader.graph.nodes[children[0]]
+    return chain, names
+
+
+def _stray_operation(migration, names):
+    for op in migration.operations:
+        target = getattr(op, "model_name_lower", None) or getattr(op, "name_lower", None)
+        if target not in names and type(op).__name__ not in SKIPPABLE:
+            return op
+    return None
 
 
 def _count(connection, table):
@@ -113,7 +148,8 @@ def _auto_throughs(model):
 
 
 def _plan_one(old, new, loader, connection, tables):
-    key, migration = _creating_migration(loader, new)
+    chain, created_names = _creating_chain(loader, new)
+    key, last = chain[0][0], chain[-1][0]
     old_table, new_table = old._meta.db_table, new._meta.db_table
     applied = key in loader.applied_migrations
     if old_table not in tables:
@@ -121,18 +157,10 @@ def _plan_one(old, new, loader, connection, tables):
     if applied and new_table not in tables:
         raise Refused(f"{key} is recorded as applied but {new_table} is missing.")
 
-    created_names = {op.name_lower for op in migration.operations if isinstance(op, CreateModel)}
-    for op in migration.operations:
-        target = getattr(op, "model_name_lower", None) or getattr(op, "name_lower", None)
-        if target not in created_names:
-            raise Refused(
-                f"{key} also does `{op.describe()}`, which Bernard would skip when recording "
-                "it: move that operation to a later migration."
-            )
-    # What the database holds once the move is recorded: every applied migration, plus this one.
+    # What the database holds once the move is recorded: every applied migration, plus the chain.
     nodes = [n for n in loader.applied_migrations if n in loader.graph.nodes]
-    state = loader.project_state([*nodes, key], at_end=True).apps
-    created = [state.get_model(key[0], name) for name in created_names]
+    state = loader.project_state([*nodes, last], at_end=True).apps
+    created = [state.get_model(key[0], name) for name in sorted(created_names)]
     models = {t._meta.db_table: t for m in created for t in [m, *_auto_throughs(m)]}
 
     drops = ()
@@ -166,7 +194,7 @@ def _plan_one(old, new, loader, connection, tables):
 
     return Move(
         old=label(old), new=label(new), setting=old._meta.swappable, migration=key,
-        records=(key, *migration.replaces), drops=drops, renames=tuple(renames),
+        records=tuple(r for k, m in chain for r in (k, *m.replaces)), drops=drops, renames=tuple(renames),
         creates=tuple(creates), alters=tuple(alters), adds=tuple(adds),
         relabels=tuple(relabels), rows=_count(connection, old_table), models=models,
     )
