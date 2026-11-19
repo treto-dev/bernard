@@ -1,7 +1,7 @@
-"""bernard: swap a Django swappable model in the middle of a project.
+"""bern: swap a Django swappable model in the middle of a project.
 
-    bernard            show what would move (reads only)
-    bernard apply      move it, in one transaction, after you type the database name
+    uvx bern           show what would move (reads only)
+    uvx bern apply     move it, in one transaction, after you type the database name
 """
 
 import argparse
@@ -14,8 +14,10 @@ from bernard import animation, core
 
 
 def main(argv=None):
+    argv = sys.argv[1:] if argv is None else argv
+    _run_in_project(argv)
     parser = argparse.ArgumentParser(
-        prog="bernard",
+        prog="bern",
         description="Move the rows of swapped-out Django models into the models that swap "
         "them in: a new shell, the same crab. Nothing is copied, and nothing changes unless everything does.",
     )
@@ -31,16 +33,42 @@ def main(argv=None):
     return _run(args)
 
 
+def _run_in_project(argv):
+    """Under uvx, bern runs in its own environment, without the project's apps: run again
+    with the project's Python, bern's own code last on the path so the project's Django wins."""
+    python = _project_python()
+    if not python or os.environ.get("BERN_IN_PROJECT"):
+        return
+    os.environ["BERN_IN_PROJECT"] = "1"
+    code = "import sys; sys.path.append(sys.argv.pop(1)); from bernard.cli import main; sys.exit(main(sys.argv[1:]))"
+    os.execv(python, [str(python), "-c", code, str(Path(__file__).resolve().parent.parent), *argv])
+
+
+def _project_python():
+    """The project's virtualenv Python, unless bern already runs in it."""
+    here = Path.cwd()
+    candidates = [os.environ.get("VIRTUAL_ENV"), *(d / ".venv" for d in [here, *here.parents])]
+    for venv in filter(None, candidates):
+        for python in (Path(venv) / "bin" / "python", Path(venv) / "Scripts" / "python.exe"):
+            if python.exists():
+                return None if Path(venv).resolve() == Path(sys.prefix).resolve() else python
+    return None
+
+
 def _setup(settings):
     sys.path.insert(0, os.getcwd())
     settings = settings or os.environ.get("DJANGO_SETTINGS_MODULE") or _from_manage_py()
     if not settings:
-        sys.exit("bernard: no Django settings found. Pass --settings, set "
-                 "DJANGO_SETTINGS_MODULE, or run bernard next to manage.py.")
+        sys.exit("bern: no Django settings found. Pass --settings, set "
+                 "DJANGO_SETTINGS_MODULE, or run bern next to manage.py.")
     os.environ["DJANGO_SETTINGS_MODULE"] = settings
     import django
 
-    django.setup()
+    try:
+        django.setup()
+    except ModuleNotFoundError as e:
+        sys.exit(f"bern: {e}. Run bern with your project's packages: from its virtualenv, "
+                 "or with `uv run --with bern bern`.")
 
 
 def _from_manage_py():
@@ -55,7 +83,7 @@ def _run(args):
 
     connection = connections[args.database]
     db_name = os.path.basename(str(connection.settings_dict["NAME"]))
-    print(f"bernard · {args.command} · {args.database} ({connection.vendor}, {db_name})\n")
+    print(f"bern · {args.command} · {args.database} ({connection.vendor}, {db_name})\n")
     moves, problems = core.plan(args.database)
     for move in moves:
         print(describe(move))
@@ -67,7 +95,7 @@ def _run(args):
         return 0
     if args.command == "plan":
         print("No row is copied, and it all runs in one transaction: if any step fails, "
-              "nothing changes.\nRun `bernard apply` to move.")
+              "nothing changes.\nRun `bern apply` to move.")
         return 0
     if not args.yes and not _confirmed(db_name):
         print("Not confirmed: nothing changed.")

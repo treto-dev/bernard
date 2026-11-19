@@ -235,7 +235,7 @@ def apply(confirmed, using="default"):
         if problems:
             raise Refused("\n".join(problems))
         if moves != confirmed:
-            raise Refused("the database changed since the plan was shown: run bernard again.")
+            raise Refused("the database changed since the plan was shown: run bern again.")
         for move in moves:
             _apply(move, editor, using)
     if apps.is_installed("django.contrib.contenttypes"):
@@ -252,7 +252,7 @@ def _lock(connection):
         cursor.execute(f"SET LOCAL lock_timeout = '{LOCK_TIMEOUT}'")
         cursor.execute("SELECT pg_try_advisory_xact_lock(%s)", [ADVISORY_LOCK])
         if not cursor.fetchone()[0]:
-            raise Refused("another bernard is running on this database.")
+            raise Refused("another bern is running on this database.")
 
 
 def _apply(move, editor, using):
