@@ -39,6 +39,23 @@ $ python manage.py migrate
 
 `uvx` runs bern in its own environment, which lacks your project's packages. So bern finds your project's virtualenv (`$VIRTUAL_ENV`, or a `.venv` in the current folder or above) and runs again with its Python. Your project's Django and apps win. Without a virtualenv to find, run `uv run --with bern bern` or install `bern` in the project.
 
+## As a Django app
+
+To make every deploy do the move, add `bern` to your project's dependencies and `"bernard"` to `INSTALLED_APPS`:
+
+```python
+INSTALLED_APPS = ["bernard", ...]
+```
+
+A plain `python manage.py migrate` then moves what there is to move, prints what it did, and migrates. Once everything has moved it says nothing. If the move is refused, `migrate` stops before it changes anything.
+
+- Only a plain `migrate` moves. `migrate --plan`, `--check`, `--fake`, a named app or migration, and the test runner are left to Django.
+- `DISABLE_BERNARD=1` in the environment turns it back into Django's `migrate`.
+- `python manage.py bern` and `python manage.py bern apply` are the CLI, run by your project.
+- List `"bernard"` before any other app that overrides `migrate`: the first one wins.
+
+Installing the app is the confirmation: `migrate` doesn't ask for the database name.
+
 ## What it does
 
 Bernard finds the swaps by itself. It loads your settings with `--settings`, `$DJANGO_SETTINGS_MODULE`, or the module your `manage.py` sets, then lists every model whose `_meta.swapped` is set. For each swap:
@@ -84,6 +101,8 @@ Run it where you run `migrate`, between stopping the old code and starting the n
 ```sh
 bern apply --yes && python manage.py migrate
 ```
+
+With `"bernard"` in `INSTALLED_APPS`, `python manage.py migrate` alone does both.
 
 After the move, the old code would query tables that no longer exist.
 

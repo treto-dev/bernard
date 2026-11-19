@@ -21,18 +21,23 @@ def main(argv=None):
         description="Move the rows of swapped-out Django models into the models that swap "
         "them in: a new shell, the same crab. Nothing is copied, and nothing changes unless everything does.",
     )
-    parser.add_argument("command", nargs="?", choices=["plan", "apply"], default="plan",
-                        help="plan (default) only reads; apply moves")
     parser.add_argument("--settings", help="settings module (default: $DJANGO_SETTINGS_MODULE, "
                         "then the one manage.py sets)")
-    parser.add_argument("--database", default="default", help="database alias (default: default)")
-    parser.add_argument("--yes", action="store_true", help="apply without asking, for deploy jobs")
-    parser.add_argument("--no-fun", action="store_true", help="skip the animations")
+    add_arguments(parser)
     args = parser.parse_args(argv)
     if not args.no_fun:
         animation.intro()
     _setup(args.settings)
-    return _run(args)
+    return run(args)
+
+
+def add_arguments(parser):
+    """The arguments `bern` and `manage.py bern` share."""
+    parser.add_argument("command", nargs="?", choices=["plan", "apply"], default="plan",
+                        help="plan (default) only reads; apply moves")
+    parser.add_argument("--database", default="default", help="database alias (default: default)")
+    parser.add_argument("--yes", action="store_true", help="apply without asking, for deploy jobs")
+    parser.add_argument("--no-fun", action="store_true", help="skip the animations")
 
 
 def _run_in_project(argv):
@@ -80,20 +85,35 @@ def _from_manage_py():
         return found and found[1]
 
 
-def _run(args):
+def disabled():
+    """DISABLE_BERNARD=1 keeps `migrate` from moving anything (see management/commands/migrate.py)."""
+    return os.environ.get("DISABLE_BERNARD", "").lower() not in ("", "0", "false", "no")
+
+
+def missing(connection):
+    """The path of a SQLite database file that doesn't exist yet. Connecting would create it."""
+    path = str(connection.settings_dict["NAME"])
+    if connection.vendor == "sqlite" and ":memory:" not in path and not os.path.exists(path):
+        return path
+
+
+def empty(connection):
+    with connection.cursor() as cursor:
+        return not connection.introspection.table_names(cursor)
+
+
+def run(args):
     from django.db import connections
 
     connection = connections[args.database]
     db_name = os.path.basename(str(connection.settings_dict["NAME"]))
     print(f"bern · {args.command} · {args.database} ({connection.vendor}, {db_name})\n")
-    path = str(connection.settings_dict["NAME"])
-    if connection.vendor == "sqlite" and ":memory:" not in path and not os.path.exists(path):
-        print(f"No database at {path}: nothing to move. (bern never creates one.)")
+    if missing(connection):
+        print(f"No database at {missing(connection)}: nothing to move. (bern never creates one.)")
         return 1
-    with connection.cursor() as cursor:
-        if not connection.introspection.table_names(cursor):
-            print("The database is empty: nothing was ever migrated in it, so nothing to move.")
-            return 0
+    if empty(connection):
+        print("The database is empty: nothing was ever migrated in it, so nothing to move.")
+        return 0
     moves, problems = core.plan(args.database)
     for move in moves:
         print(describe(move))

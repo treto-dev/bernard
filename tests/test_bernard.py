@@ -69,9 +69,9 @@ def db(tmp_path):
     subprocess.run(["dropdb", name], check=True)
 
 
-def run(db, settings, *args, check=True):
+def run(db, settings, *args, check=True, env=()):
     env = {**os.environ, "PYTHONPATH": str(PROJECT), "BERNARD_TEST_DB": db,
-           "DJANGO_SETTINGS_MODULE": settings, "PYTHONWARNINGS": "ignore"}
+           "DJANGO_SETTINGS_MODULE": settings, "PYTHONWARNINGS": "ignore", **dict(env)}
     result = subprocess.run([sys.executable, *args], env=env, cwd=PROJECT,
                             capture_output=True, text=True, stdin=subprocess.DEVNULL)
     if check and result.returncode:
@@ -180,3 +180,25 @@ def test_adopts_the_legacy_tables_in_place_when_the_new_model_keeps_their_names(
     run_in_place("-m", "django", "migrate")
     assert run_in_place("-m", "django", "shell", "-c", IN_PLACE).stdout.split()[-1] == "ok"
     assert "Nothing to move" in run_in_place("-m", "bernard.cli", "apply", "--yes").stdout
+
+
+def test_as_an_installed_app_a_plain_migrate_moves_first(db):
+    content_type = legacy_project(db)
+    plan = django(db, "settings_app", "bern", "--no-fun").stdout
+    assert "auth.User → accounts.User" in plan
+
+    disabled = django(db, "settings_app", "migrate", check=False, env={"DISABLE_BERNARD": "1"})
+    assert "InconsistentMigrationHistory" in disabled.stderr
+    untouched = django(db, "settings_app", "migrate", "--plan", check=False)
+    assert "InconsistentMigrationHistory" in untouched.stderr
+    assert django(db, "settings_app", "bern", "--no-fun").stdout == plan, "neither moved anything"
+
+    migrated = django(db, "settings_app", "migrate").stdout
+    assert "moved in (2 rows, none copied)" in migrated and "Applying" not in migrated.split("moved in")[0]
+    assert django(db, "settings_app", "shell", "-c", CHECK).stdout.split()[-1] == content_type
+    assert "bern" not in django(db, "settings_app", "migrate").stdout, "silent once moved"
+
+
+def test_as_an_installed_app_migrate_still_builds_a_new_database(db):
+    assert "bern" not in django(db, "settings_app", "migrate").stdout
+    assert django(db, "settings_app", "test", "--noinput").returncode == 0
