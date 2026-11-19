@@ -154,3 +154,29 @@ def test_plan_never_creates_a_database(tmp_path):
     result = bernard(str(missing), check=False)
     assert result.returncode == 1 and "No database at" in result.stdout
     assert not missing.exists()
+
+
+IN_PLACE = """
+from django.contrib.auth import get_user_model
+from shop.models import Order
+User = get_user_model()
+assert User._meta.label == "members.User" and User._meta.db_table == "auth_user"
+alice = User.objects.get(username="alice")
+assert alice.check_password("pw") and alice.has_perm("members.change_user")
+assert Order.objects.get().user == alice
+print("ok")
+"""
+
+
+def test_adopts_the_legacy_tables_in_place_when_the_new_model_keeps_their_names(db):
+    legacy_project(db)
+    run_in_place = lambda *args, **kw: run(db, "settings_in_place", *args, **kw)  # noqa: E731
+    plan = run_in_place("-m", "bernard.cli").stdout
+    assert "auth.User → members.User" in plan
+    assert "rename" not in plan and "drop" not in plan
+    assert "relabel  auth.user → members.user" in plan
+
+    run_in_place("-m", "bernard.cli", "apply", "--yes")
+    run_in_place("-m", "django", "migrate")
+    assert run_in_place("-m", "django", "shell", "-c", IN_PLACE).stdout.split()[-1] == "ok"
+    assert "Nothing to move" in run_in_place("-m", "bernard.cli", "apply", "--yes").stdout

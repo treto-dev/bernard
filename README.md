@@ -51,6 +51,8 @@ Bernard finds the swaps by itself. It loads your settings with `--settings`, `$D
 
 This is safe because Django skips every migration operation on a swapped-out model, so nothing will touch its tables again.
 
+If the new model keeps the legacy table name with `Meta.db_table` (for example `db_table = "auth_user"`), Bern renames nothing. It adopts the tables in place, then relabels the content types and records the migrations.
+
 ## Safety
 
 - **Plan first.** `bern` with no command only reads. `apply` asks you to type the database name. In a deploy job with no terminal, it refuses unless you pass `--yes`.

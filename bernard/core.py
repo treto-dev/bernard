@@ -154,6 +154,9 @@ def _plan_one(old, new, loader, connection, tables):
     applied = key in loader.applied_migrations
     if old_table not in tables:
         return None  # fresh database, or already moved
+    in_place = old_table == new_table  # the new model kept the legacy table (Meta.db_table)
+    if in_place and applied:
+        return None  # already adopted
     if applied and new_table not in tables:
         raise Refused(f"{key} is recorded as applied but {new_table} is missing.")
 
@@ -164,7 +167,7 @@ def _plan_one(old, new, loader, connection, tables):
     models = {t._meta.db_table: t for m in created for t in [m, *_auto_throughs(m)]}
 
     drops = ()
-    if new_table in tables:
+    if new_table in tables and not in_place:
         if not _count(connection, old_table):
             return None  # the legacy table was left behind empty: nothing to move
         drops = _droppable(models, key, loader, connection, tables)
@@ -175,7 +178,7 @@ def _plan_one(old, new, loader, connection, tables):
         is_main = model._meta.model_name == new._meta.model_name
         table = model._meta.db_table
         legacy = old_table if is_main else _swap_prefix(table, old, new)
-        if legacy not in tables or (not is_main and legacy in live):
+        if legacy not in tables or (not is_main and legacy in live and legacy != table):
             creates.append(table)
             continue
         relabels.append(
@@ -187,7 +190,8 @@ def _plan_one(old, new, loader, connection, tables):
             if hm_legacy not in tables:
                 creates.append(hm._meta.db_table)
                 continue
-            renames.append((hm_legacy, hm._meta.db_table))
+            if hm_legacy != hm._meta.db_table:
+                renames.append((hm_legacy, hm._meta.db_table))
             adds += _missing(hm, hm_legacy, connection)
         if is_main:
             alters += _type_changes(old, model, connection)
