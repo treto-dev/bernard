@@ -1,4 +1,4 @@
-# Publishing a GitHub release whose tag is v<version> (e.g. v0.1.0) builds and uploads to PyPI.
+# Publishing a GitHub release builds and uploads to PyPI, versioned by its tag (v2026.11.19 → 2026.11.19).
 # Trusted publishing: no token is stored; PyPI trusts this workflow in the `pypi` environment.
 name: Publish to PyPI
 
@@ -17,10 +17,10 @@ jobs:
         with:
           persist-credentials: false
       - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
-      - name: Check the tag matches the version
+      - name: Take the version from the tag
         env:
           TAG: ${{ github.event.release.tag_name }}
-        run: test "$TAG" = "v$(uv version --short)"
+        run: uv version --frozen "${TAG#v}"
       - run: uv run pytest
       - run: uv build
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
