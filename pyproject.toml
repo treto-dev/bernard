@@ -1,0 +1,25 @@
+[project]
+name = "django-bernard"
+version = "0.1.0"
+description = "Swap a Django swappable model mid-project: the hermit crab changes shells, the crab stays the same."
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT"
+dependencies = ["django>=4.2"]
+
+[project.scripts]
+bernard = "bernard.cli:main"
+
+[dependency-groups]
+dev = ["pytest>=8", "psycopg[binary]>=3.1"]
+
+[build-system]
+requires = ["uv_build>=0.8,<0.14"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-root = ""
+module-name = "bernard"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
