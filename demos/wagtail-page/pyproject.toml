@@ -1,0 +1,11 @@
+[project]
+name = "demo-wagtail-page"
+version = "0"
+requires-python = ">=3.12"
+dependencies = ["wagtail>=8.1,<8.2", "bern"]
+
+[tool.uv]
+package = false
+
+[tool.uv.sources]
+bern = { path = "../..", editable = true }
